@@ -4,8 +4,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex,nofollow" />
   <title>Centrunk Config Generator</title>
-  <!-- Self‑contained styling so it works on GitHub Pages without a build step -->
   <style>
     :root {
       font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -99,22 +99,12 @@
 
   <form id="configForm" novalidate>
     <label>Config Type
-      <select id="configType" name="configType">
+      <select id="configType">
         <option value="CC">Control&nbsp;Channel&nbsp;(CC)</option>
         <option value="VC">Voice&nbsp;Channel&nbsp;(VC)</option>
       </select>
     </label>
-    <label>NET_ID <input id="NET_ID" type="text" placeholder="71001" required></label>
-    <label>SITE_ID <input id="SITE_ID" type="text" placeholder="47" required></label>
-    <label>RFSS_ID <input id="RFSS_ID" type="text" placeholder="1" required></label>
-    <label>CC_CH_ID <input id="CC_CH_ID" type="number" placeholder="1" required></label>
-    <label>CC_CH_NO <input id="CC_CH_NO" type="number" placeholder="47" required></label>
-    <label>V_CH_NO <input id="V_CH_NO" type="number" placeholder="802" required></label>
-    <label>NAC <input id="NAC" type="text" placeholder="0x293" required></label>
-    <label>LATITUDE <input id="LATITUDE" type="number" step="any" placeholder="41.505493" required></label>
-    <label>LONGITUDE <input id="LONGITUDE" type="number" step="any" placeholder="-81.68129" required></label>
-    <label>LOCATION <input id="LOCATION" type="text" placeholder="Cleveland, Ohio USA" required></label>
-    <label>REST_PASSWORD <input id="REST_PASSWORD" type="password" placeholder="password" required></label>
+    <!-- Dynamic variable inputs inserted here -->
   </form>
 
   <div id="actions">
@@ -126,60 +116,89 @@
   <textarea id="output" readonly placeholder="Generated YAML will appear here…"></textarea>
 
   <script>
-    // Fetch templates from /templates directory
     const templateCache = {}; // { CC: string, VC: string }
-    const fields = [
-      "NET_ID", "SITE_ID", "RFSS_ID", "CC_CH_ID", "CC_CH_NO", "V_CH_NO", "NAC",
-      "LATITUDE", "LONGITUDE", "LOCATION", "REST_PASSWORD"
-    ];
-
-    const configForm = document.getElementById('configForm');
+    const form = document.getElementById('configForm');
     const configTypeEl = document.getElementById('configType');
     const output = document.getElementById('output');
     const generateBtn = document.getElementById('generateBtn');
     const downloadBtn = document.getElementById('downloadBtn');
     const copyBtn = document.getElementById('copyBtn');
+    let varFields = []; // array of variable names currently in the form
 
-    // --- Form validation helper ---
-    function validateForm() {
-      generateBtn.disabled = !configForm.checkValidity();
-      // reset downstream buttons when form changes
-      downloadBtn.disabled = copyBtn.disabled = true;
-      output.value = '';
+    // -------- util helpers --------
+    function randPwd(len = 12) {
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+      let p = '';
+      for (let i = 0; i < len; i++) p += chars[Math.floor(Math.random() * chars.length)];
+      return p;
     }
 
-    // attach validation listener to every input/select
-    document.querySelectorAll('#configForm input, #configForm select').forEach(el => {
-      el.addEventListener('input', validateForm);
-    });
-    // run once on load
-    validateForm();
-
-    async function loadTemplate(type) {
+    async function fetchTemplate(type) {
       if (templateCache[type]) return templateCache[type];
-      const resp = await fetch(`templates/config${type}.yml`);
-      if (!resp.ok) throw new Error(`Template fetch failed (${type})`);
-      const txt = await resp.text();
+      const res = await fetch(`templates/config${type}.yml`);
+      if (!res.ok) throw new Error(`Could not fetch template ${type}`);
+      const txt = await res.text();
       templateCache[type] = txt; return txt;
+    }
+
+    async function loadAllTemplates() {
+      const [cc, vc] = await Promise.all([fetchTemplate('CC'), fetchTemplate('VC')]);
+      const vars = new Set();
+      const re = /\$\{([A-Z0-9_]+)\}/g;
+      for (const t of [cc, vc]) { let m; while ((m = re.exec(t))) vars.add(m[1]); }
+      buildDynamicFields(Array.from(vars).sort());
+    }
+
+    function buildDynamicFields(vars) {
+      // remove old inputs except configType select
+      document.querySelectorAll('#configForm .dyn').forEach(el => el.remove());
+      varFields = vars;
+      vars.forEach(v => {
+        const label = document.createElement('label');
+        label.className = 'dyn';
+        label.innerHTML = `${v} <input id="${v}" data-var="${v}" required>`;
+        form.appendChild(label);
+      });
+      // special handling for REST_PASSWORD
+      if (document.getElementById('REST_PASSWORD')) {
+        const inp = document.getElementById('REST_PASSWORD');
+        inp.type = 'text';
+        inp.value = randPwd();
+      }
+      attachValidationListeners();
+      validateForm();
+    }
+
+    function attachValidationListeners() {
+      document.querySelectorAll('#configForm input, #configForm select').forEach(el => {
+        el.addEventListener('input', validateForm);
+      });
+    }
+
+    function validateForm() {
+      // simple: every required input must be non-empty
+      const allFilled = [...document.querySelectorAll('#configForm input[required]')].every(i => i.value.trim() !== '');
+      generateBtn.disabled = !allFilled;
+      // clear downstream state when editing
+      if (!allFilled) { output.value = ''; downloadBtn.disabled = copyBtn.disabled = true; }
     }
 
     function substitute(tmpl) {
       let res = tmpl;
-      fields.forEach(f => {
-        const val = document.getElementById(f).value;
-        res = res.replace(new RegExp(`\\$\\{${f}\\}`, 'g'), val);
+      varFields.forEach(v => {
+        const val = document.getElementById(v).value;
+        res = res.replace(new RegExp(`\\$\\{${v}\\}`, 'g'), val);
       });
       return res;
     }
 
     async function generate() {
       try {
-        const type = configTypeEl.value;
-        const tmpl = await loadTemplate(type);
+        const tmpl = await fetchTemplate(configTypeEl.value);
         output.value = substitute(tmpl);
         downloadBtn.disabled = copyBtn.disabled = false;
-      } catch (err) {
-        output.value = `Error: ${err.message}`;
+      } catch (e) {
+        output.value = `Error: ${e.message}`;
         downloadBtn.disabled = copyBtn.disabled = true;
       }
     }
@@ -188,10 +207,8 @@
       const blob = new Blob([output.value], { type: 'text/yaml' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url;
-      a.download = `centrunk-config${configTypeEl.value}.yml`;
-      a.click();
-      URL.revokeObjectURL(url);
+      a.href = url; a.download = `centrunk-config${configTypeEl.value}.yml`;
+      a.click(); URL.revokeObjectURL(url);
     }
 
     function copy() {
@@ -201,9 +218,13 @@
       });
     }
 
+    // Event bindings
     generateBtn.addEventListener('click', e => { e.preventDefault(); generate(); });
     downloadBtn.addEventListener('click', e => { e.preventDefault(); download(); });
     copyBtn.addEventListener('click', e => { e.preventDefault(); copy(); });
+
+    // Kick things off
+    loadAllTemplates();
   </script>
 </body>
 
