@@ -115,6 +115,11 @@
 
   <textarea id="output" readonly placeholder="Generated YAML will appear here…"></textarea>
 
+  <footer style="font-size:.8rem;opacity:.7;text-align:center;max-width:1080px">
+    <a href="https://github.com/dandrzejewski/centrunk-config-generator" target="_blank" rel="noopener">Source&nbsp;on&nbsp;GitHub</a>
+    — commit <span id="commitSha">${COMMIT_SHA}</span>
+  </footer>
+
   <script>
     const templateCache = {}; // { CC: string, VC: string }
     const form = document.getElementById('configForm');
