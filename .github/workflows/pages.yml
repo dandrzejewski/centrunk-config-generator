@@ -20,7 +20,8 @@ jobs:
       - name: Inject commit SHA & disable Jekyll
         run: |
           short_sha=$(echo "$GITHUB_SHA" | cut -c1-7)
-          sed -i "s/\\$\\{COMMIT_SHA\\}/$short_sha/" index.html
+          # replace literal ${COMMIT_SHA} token with the short SHA
+          sed -i "s/\\\${COMMIT_SHA}/$short_sha/g" index.html
           touch .nojekyll
 
       - name: Upload Pages artifact
