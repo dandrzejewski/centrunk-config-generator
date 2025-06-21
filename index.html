@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Centrunk Config Generator</title>
+  <!-- Simple, self‑contained styling so it works on GitHub Pages without a build step -->
+  <style>
+    :root {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color-scheme: light dark;
+    }
+
+    body {
+      margin: 0;
+      padding: 2rem 1rem;
+      display: grid;
+      place-items: start center;
+      gap: 2rem;
+      background: var(--bg, #111);
+      color: var(--fg, #eee);
+    }
+
+    h1 {
+      font-size: 1.6rem;
+      text-align: center;
+      margin: 0;
+    }
+
+    #configForm {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+      gap: 1rem;
+      width: 100%;
+      max-width: 1080px;
+    }
+
+    label {
+      display: flex;
+      flex-direction: column;
+      font-size: .9rem;
+    }
+
+    input,
+    select {
+      padding: .5rem .75rem;
+      border-radius: .375rem;
+      border: 1px solid #666;
+      background: #222;
+      color: #eee;
+    }
+
+    button {
+      padding: .6rem 1.2rem;
+      border: 0;
+      border-radius: .375rem;
+      font-weight: 600;
+      cursor: pointer;
+      background: #0d6efd;
+      color: #fff;
+      transition: background .2s;
+    }
+
+    button:hover:enabled {
+      background: #0953c7;
+    }
+
+    button:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+    }
+
+    #actions {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    textarea {
+      width: 100%;
+      max-width: 1080px;
+      height: 520px;
+      padding: 1rem;
+      border-radius: .5rem;
+      border: 1px solid #666;
+      background: #1b1b1b;
+      color: #eee;
+      font-family: "Fira Code", monospace;
+      font-size: .85rem;
+      resize: vertical;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Centrunk YAML Config Generator</h1>
+
+  <form id="configForm">
+    <label>Config Type
+      <select id="configType" name="configType">
+        <option value="CC">Control&nbsp;Channel&nbsp;(CC)</option>
+        <option value="VC">Voice&nbsp;Channel&nbsp;(VC)</option>
+      </select>
+    </label>
+    <label>NET_ID <input id="NET_ID" type="text" placeholder="DEE00" required></label>
+    <label>SITE_ID <input id="SITE_ID" type="text" placeholder="101" required></label>
+    <label>RFSS_ID <input id="RFSS_ID" type="text" placeholder="13" required></label>
+    <label>CC_CH_ID <input id="CC_CH_ID" type="number" placeholder="1" required></label>
+    <label>CC_CH_NO <input id="CC_CH_NO" type="number" placeholder="47" required></label>
+    <label>V_CH_NO <input id="V_CH_NO" type="number" placeholder="802" required></label>
+    <label>NAC <input id="NAC" type="text" placeholder="0x293" required></label>
+    <label>LATITUDE <input id="LATITUDE" type="number" step="any" placeholder="41.505493" required></label>
+    <label>LONGITUDE <input id="LONGITUDE" type="number" step="any" placeholder="-81.68129" required></label>
+    <label>LOCATION <input id="LOCATION" type="text" placeholder="Cleveland, Ohio USA" required></label>
+    <label>REST_PASSWORD <input id="REST_PASSWORD" type="password" placeholder="password" required></label>
+  </form>
+
+  <div id="actions">
+    <button id="generateBtn">Generate Config</button>
+    <button id="downloadBtn" disabled>Download YAML</button>
+    <button id="copyBtn" disabled>Copy</button>
+  </div>
+
+  <textarea id="output" readonly placeholder="Generated YAML will appear here…"></textarea>
+
+  <script>
+    /*
+      We fetch the raw YAML templates (configCC.yml & configVC.yml) that live
+      next to this file in /templates/.  That keeps the big templates out of
+      the JS and lets you edit them directly in the repo.
+    */
+    const templateCache = {}; // { CC: string, VC: string }
+    const vars = [
+      "NET_ID", "SITE_ID", "RFSS_ID", "CC_CH_ID", "CC_CH_NO", "V_CH_NO", "NAC",
+      "LATITUDE", "LONGITUDE", "LOCATION", "REST_PASSWORD"
+    ];
+
+    const configTypeEl = document.getElementById('configType');
+    const output = document.getElementById('output');
+    const generateBtn = document.getElementById('generateBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const copyBtn = document.getElementById('copyBtn');
+
+    async function loadTemplate(type) {
+      if (templateCache[type]) return templateCache[type];
+      const resp = await fetch(`templates/config${type}.yml`);
+      if (!resp.ok) throw new Error(`Template fetch failed (${type})`);
+      const txt = await resp.text();
+      templateCache[type] = txt; return txt;
+    }
+
+    function substitute(tmpl) {
+      let res = tmpl;
+      vars.forEach(v => {
+        const val = document.getElementById(v).value;
+        res = res.replace(new RegExp(`\\$\\{${v}\\}`, 'g'), val);
+      });
+      return res;
+    }
+
+    async function generate() {
+      try {
+        const type = configTypeEl.value;
+        const tmpl = await loadTemplate(type);
+        const cfg = substitute(tmpl);
+        output.value = cfg;
+        downloadBtn.disabled = copyBtn.disabled = false;
+      } catch (err) {
+        output.value = `Error: ${err.message}`;
+        downloadBtn.disabled = copyBtn.disabled = true;
+      }
+    }
+
+    function download() {
+      const blob = new Blob([output.value], { type: 'text/yaml' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `centrunk-config${configTypeEl.value}.yml`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function copy() {
+      navigator.clipboard.writeText(output.value).then(() => {
+        copyBtn.textContent = 'Copied ✔';
+        setTimeout(() => copyBtn.textContent = 'Copy', 2000);
+      });
+    }
+
+    generateBtn.addEventListener('click', e => { e.preventDefault(); generate(); });
+    downloadBtn.addEventListener('click', e => { e.preventDefault(); download(); });
+    copyBtn.addEventListener('click', e => { e.preventDefault(); copy(); });
+  </script>
+</body>
+
+</html>
