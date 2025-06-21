@@ -2,11 +2,10 @@
 <html lang="en">
 
 <head>
-  <meta name="robots" content="noindex,nofollow" />
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Centrunk Config Generator</title>
-  <!-- Simple, self‑contained styling so it works on GitHub Pages without a build step -->
+  <!-- Self‑contained styling so it works on GitHub Pages without a build step -->
   <style>
     :root {
       font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -19,8 +18,8 @@
       display: grid;
       place-items: start center;
       gap: 2rem;
-      background: var(--bg, #111);
-      color: var(--fg, #eee);
+      background: #111;
+      color: #eee;
     }
 
     h1 {
@@ -98,7 +97,7 @@
 <body>
   <h1>Centrunk YAML Config Generator</h1>
 
-  <form id="configForm">
+  <form id="configForm" novalidate>
     <label>Config Type
       <select id="configType" name="configType">
         <option value="CC">Control&nbsp;Channel&nbsp;(CC)</option>
@@ -119,7 +118,7 @@
   </form>
 
   <div id="actions">
-    <button id="generateBtn">Generate Config</button>
+    <button id="generateBtn" disabled>Generate Config</button>
     <button id="downloadBtn" disabled>Download YAML</button>
     <button id="copyBtn" disabled>Copy</button>
   </div>
@@ -127,22 +126,34 @@
   <textarea id="output" readonly placeholder="Generated YAML will appear here…"></textarea>
 
   <script>
-    /*
-      We fetch the raw YAML templates (configCC.yml & configVC.yml) that live
-      next to this file in /templates/.  That keeps the big templates out of
-      the JS and lets you edit them directly in the repo.
-    */
+    // Fetch templates from /templates directory
     const templateCache = {}; // { CC: string, VC: string }
-    const vars = [
+    const fields = [
       "NET_ID", "SITE_ID", "RFSS_ID", "CC_CH_ID", "CC_CH_NO", "V_CH_NO", "NAC",
       "LATITUDE", "LONGITUDE", "LOCATION", "REST_PASSWORD"
     ];
 
+    const configForm = document.getElementById('configForm');
     const configTypeEl = document.getElementById('configType');
     const output = document.getElementById('output');
     const generateBtn = document.getElementById('generateBtn');
     const downloadBtn = document.getElementById('downloadBtn');
     const copyBtn = document.getElementById('copyBtn');
+
+    // --- Form validation helper ---
+    function validateForm() {
+      generateBtn.disabled = !configForm.checkValidity();
+      // reset downstream buttons when form changes
+      downloadBtn.disabled = copyBtn.disabled = true;
+      output.value = '';
+    }
+
+    // attach validation listener to every input/select
+    document.querySelectorAll('#configForm input, #configForm select').forEach(el => {
+      el.addEventListener('input', validateForm);
+    });
+    // run once on load
+    validateForm();
 
     async function loadTemplate(type) {
       if (templateCache[type]) return templateCache[type];
@@ -154,9 +165,9 @@
 
     function substitute(tmpl) {
       let res = tmpl;
-      vars.forEach(v => {
-        const val = document.getElementById(v).value;
-        res = res.replace(new RegExp(`\\$\\{${v}\\}`, 'g'), val);
+      fields.forEach(f => {
+        const val = document.getElementById(f).value;
+        res = res.replace(new RegExp(`\\$\\{${f}\\}`, 'g'), val);
       });
       return res;
     }
@@ -165,8 +176,7 @@
       try {
         const type = configTypeEl.value;
         const tmpl = await loadTemplate(type);
-        const cfg = substitute(tmpl);
-        output.value = cfg;
+        output.value = substitute(tmpl);
         downloadBtn.disabled = copyBtn.disabled = false;
       } catch (err) {
         output.value = `Error: ${err.message}`;
