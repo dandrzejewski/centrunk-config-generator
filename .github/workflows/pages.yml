@@ -1,43 +1,47 @@
 name: Deploy static site to GitHub Pages
 
-
 on:
   push:
-    branches: ["main"]
+    branches: ["main"] 
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
+  pages: write           # for the deploy job
   id-token: write
 
 jobs:
+  # --------------------------
+  # Build job – creates artifact
+  # --------------------------
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Inject commit SHA & disable Jekyll
         run: |
-          short_sha=$(echo "$GITHUB_SHA" | cut -c1-7)
-          # replace literal ${COMMIT_SHA} token with the short SHA
-          sed -i "s/\\\${COMMIT_SHA}/$short_sha/g" index.html
+          short=${GITHUB_SHA::7}
+          sed -i "s/\\\${COMMIT_SHA}/$short/g" index.html
           touch .nojekyll
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
+          # root of repo; change if you output to a subdir
           path: .
 
+  # --------------------------
+  # Deploy job – must be separate
+  # --------------------------
   deploy:
     needs: build
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
+      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
       - name: Deploy to GitHub Pages
-        id: deploy
+        id: deployment
         uses: actions/deploy-pages@v3
