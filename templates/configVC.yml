@@ -58,6 +58,7 @@ protocols:
     queueSize: 15
     verbose: true
     debug: false
+    allowExplicitSourceId: true
 system:
   identity: ${RFSS_ID}-${SITE_ID} VC
   timeout: 180
