@@ -5,6 +5,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="robots" content="noindex,nofollow" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/atom-one-dark.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/languages/yaml.min.js"></script>
   <title>Centrunk Config Generator</title>
   <style>
     :root {
@@ -78,18 +81,45 @@
       justify-content: center;
     }
 
-    textarea {
+    pre {
       width: 100%;
       max-width: 1080px;
+      margin: 0;
+    }
+
+    code#output {
+      display: block;
+      width: 100%;
       height: 520px;
       padding: 1rem;
       border-radius: .5rem;
       border: 1px solid #666;
-      background: #1b1b1b;
+      background: #1b1b1b !important;
       color: #eee;
       font-family: "Fira Code", monospace;
       font-size: .85rem;
-      resize: vertical;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+
+    #hiddenOutput {
+      display: none;
+    }
+
+    /* YAML syntax highlighting customization */
+    .hljs-number {
+      color: #d19a66 !important;
+      /* orange-ish for numbers */
+    }
+
+    .hljs-attr {
+      color: #61afef !important;
+      /* blue-ish for keys */
+    }
+
+    .hljs-literal {
+      color: #a4bbbe !important;
+      /* cyan-ish for booleans */
     }
   </style>
 </head>
@@ -113,13 +143,15 @@
     <button id="copyBtn" disabled>Copy</button>
   </div>
 
-  <textarea id="output" readonly placeholder="Generated YAML will appear here…"></textarea>
+  <textarea id="hiddenOutput" readonly></textarea>
+  <pre><code id="output" class="language-yaml" aria-label="Generated YAML config"></code></pre>
 
   <script>
     const templateCache = {}; // { CC: string, VC: string }
     const form = document.getElementById('configForm');
     const configTypeEl = document.getElementById('configType');
     const output = document.getElementById('output');
+    const hiddenOutput = document.getElementById('hiddenOutput');
     const generateBtn = document.getElementById('generateBtn');
     const downloadBtn = document.getElementById('downloadBtn');
     const copyBtn = document.getElementById('copyBtn');
@@ -195,27 +227,33 @@
     async function generate() {
       try {
         const tmpl = await fetchTemplate(configTypeEl.value);
-        output.value = substitute(tmpl);
+        const generatedYaml = substitute(tmpl);
+        output.textContent = generatedYaml;
+        hiddenOutput.value = generatedYaml;
+        hljs.highlightElement(output);
         downloadBtn.disabled = copyBtn.disabled = false;
       } catch (e) {
-        output.value = `Error: ${e.message}`;
+        output.textContent = `Error: ${e.message}`;
+        hiddenOutput.value = output.textContent;
         downloadBtn.disabled = copyBtn.disabled = true;
       }
     }
 
-    function download() {
-      const blob = new Blob([output.value], { type: 'text/yaml' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = `centrunk-config${configTypeEl.value}.yml`;
-      a.click(); URL.revokeObjectURL(url);
-    }
-
     function copy() {
-      navigator.clipboard.writeText(output.value).then(() => {
+      navigator.clipboard.writeText(hiddenOutput.value).then(() => {
         copyBtn.textContent = 'Copied ✔';
         setTimeout(() => copyBtn.textContent = 'Copy', 2000);
       });
+    }
+
+    function download() {
+      const blob = new Blob([hiddenOutput.value], { type: 'text/yaml' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `centrunk-config${configTypeEl.value}.yml`;
+      a.click();
+      URL.revokeObjectURL(url);
     }
 
     // Event bindings
